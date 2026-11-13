@@ -1,0 +1,638 @@
+{
+  "entities": {
+    "UserProfilePrivate": {
+      "title": "UserProfilePrivate",
+      "description": "Private user profile, contact details, location, social links, selfie logo, and invite metadata owned strictly by the authenticated user.",
+      "type": "object",
+      "properties": {
+        "uid": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "firstName": {
+          "type": "string",
+          "maxLength": 80
+        },
+        "lastName": {
+          "type": "string",
+          "maxLength": 80
+        },
+        "email": {
+          "type": "string",
+          "format": "email",
+          "maxLength": 160
+        },
+        "contactInfo": {
+          "type": "string",
+          "maxLength": 80
+        },
+        "locationName": {
+          "type": "string",
+          "maxLength": 200
+        },
+        "autoLocation": {
+          "type": "boolean"
+        },
+        "socialLinks": {
+          "type": "array"
+        },
+        "isLocked": {
+          "type": "boolean"
+        },
+        "logoDataUrl": {
+          "type": "string",
+          "maxLength": 400000
+        },
+        "logoUpdatedAt": {
+          "type": "integer"
+        },
+        "inviteCode": {
+          "type": "string",
+          "minLength": 4,
+          "maxLength": 32,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "invitedBy": {
+          "type": "string",
+          "maxLength": 32
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "uid",
+        "firstName",
+        "lastName",
+        "email",
+        "contactInfo",
+        "locationName",
+        "autoLocation",
+        "socialLinks",
+        "isLocked",
+        "inviteCode",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "SubscriptionSubmission": {
+      "title": "SubscriptionSubmission",
+      "description": "Subscription plan selection and identity verification submission record. Can be resubmitted by owner if rejected.",
+      "type": "object",
+      "properties": {
+        "uid": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "plan": {
+          "type": "string",
+          "enum": ["tenant", "user"]
+        },
+        "status": {
+          "type": "string",
+          "enum": ["pending_review", "active", "rejected"]
+        },
+        "submittedAt": {
+          "type": "integer"
+        },
+        "docCount": {
+          "type": "integer"
+        },
+        "docNames": {
+          "type": "array"
+        },
+        "paymentDocCount": {
+          "type": "integer"
+        },
+        "paymentDocNames": {
+          "type": "array"
+        },
+        "hasSelfie": {
+          "type": "boolean"
+        },
+        "rejectionReason": {
+          "type": "string",
+          "minLength": 3,
+          "maxLength": 500
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "uid",
+        "plan",
+        "status",
+        "submittedAt",
+        "docCount",
+        "docNames",
+        "hasSelfie",
+        "createdAt"
+      ]
+    },
+    "InviteCodeRecord": {
+      "title": "InviteCodeRecord",
+      "description": "Non-PII lookup record mapping a shareable User Sub invite code to its owner UID.",
+      "type": "object",
+      "properties": {
+        "inviteCode": {
+          "type": "string",
+          "minLength": 4,
+          "maxLength": 32,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "ownerUid": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": ["inviteCode", "ownerUid", "createdAt"]
+    },
+    "AdminRecord": {
+      "title": "AdminRecord",
+      "description": "Verified main admin role record bootstrapped for timegig2026@gmail.com.",
+      "type": "object",
+      "properties": {
+        "uid": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "email": {
+          "type": "string",
+          "format": "email",
+          "maxLength": 160
+        },
+        "role": {
+          "type": "string",
+          "enum": ["main_admin"]
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": ["uid", "email", "role", "createdAt"]
+    },
+    "UserSubReferral": {
+      "title": "UserSubReferral",
+      "description": "User Subscription referral & verification submission visible in the main admin Referrals feature for review, approval, and rejection.",
+      "type": "object",
+      "properties": {
+        "uid": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "applicantName": {
+          "type": "string",
+          "maxLength": 160
+        },
+        "applicantEmail": {
+          "type": "string",
+          "maxLength": 160
+        },
+        "contactInfo": {
+          "type": "string",
+          "maxLength": 80
+        },
+        "locationName": {
+          "type": "string",
+          "maxLength": 200
+        },
+        "invitedBy": {
+          "type": "string",
+          "maxLength": 32
+        },
+        "plan": {
+          "type": "string",
+          "enum": ["user", "tenant"]
+        },
+        "status": {
+          "type": "string",
+          "enum": ["pending_review", "approved", "rejected"]
+        },
+        "docCount": {
+          "type": "integer"
+        },
+        "docNames": {
+          "type": "array"
+        },
+        "paymentDocCount": {
+          "type": "integer"
+        },
+        "paymentDocNames": {
+          "type": "array"
+        },
+        "hasSelfie": {
+          "type": "boolean"
+        },
+        "submittedAt": {
+          "type": "integer"
+        },
+        "reviewedBy": {
+          "type": "string",
+          "maxLength": 128
+        },
+        "reviewedAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "rejectionReason": {
+          "type": "string",
+          "minLength": 3,
+          "maxLength": 500
+        },
+        "resubmittedCount": {
+          "type": "integer"
+        },
+        "previousRejectionReason": {
+          "type": "string",
+          "minLength": 3,
+          "maxLength": 500
+        },
+        "resubmittedAt": {
+          "type": "integer"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "uid",
+        "applicantName",
+        "applicantEmail",
+        "contactInfo",
+        "locationName",
+        "invitedBy",
+        "plan",
+        "status",
+        "docCount",
+        "docNames",
+        "hasSelfie",
+        "submittedAt",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "VerificationArtifactFile": {
+      "title": "VerificationArtifactFile",
+      "description": "Captured face selfie, ID document, or proof of payment image/PDF attached to a subscription application for full-screen verification review.",
+      "type": "object",
+      "properties": {
+        "uid": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "fileId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "category": {
+          "type": "string",
+          "enum": ["selfie", "id_document", "proof_of_payment"]
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 160
+        },
+        "mimeType": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 100
+        },
+        "dataUrl": {
+          "type": "string",
+          "minLength": 10,
+          "maxLength": 800000
+        },
+        "size": {
+          "type": "integer"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": ["uid", "fileId", "category", "name", "mimeType", "dataUrl", "size", "createdAt"]
+    },
+    "MainTenantInvite": {
+      "title": "MainTenantInvite",
+      "description": "Public non-PII marker identifying invite codes owned by the main tenant and approved network tenants.",
+      "type": "object",
+      "properties": {
+        "inviteCode": {
+          "type": "string",
+          "minLength": 4,
+          "maxLength": 32,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "ownerUid": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": ["inviteCode", "ownerUid", "createdAt"]
+    },
+    "ApprovedLinkTenant": {
+      "title": "ApprovedLinkTenant",
+      "description": "Approved tenant who joined through the main tenant invite link and holds the same verification review capabilities.",
+      "type": "object",
+      "properties": {
+        "uid": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "invitedBy": {
+          "type": "string",
+          "minLength": 4,
+          "maxLength": 32,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "approvedBy": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "plan": {
+          "type": "string",
+          "enum": ["tenant"]
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": ["uid", "invitedBy", "approvedBy", "plan", "createdAt"]
+    },
+    "TenantReferralProfit": {
+      "title": "TenantReferralProfit",
+      "description": "Non-PII subscription proof-of-payment referral profit record credited to the referrer tenant wallet when a referred user or tenant joins via their link and submits a subscription.",
+      "type": "object",
+      "properties": {
+        "referralUid": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "referrerUid": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "invitedBy": {
+          "type": "string",
+          "minLength": 4,
+          "maxLength": 32,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "referralName": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 160
+        },
+        "plan": {
+          "type": "string",
+          "enum": ["user", "tenant"]
+        },
+        "subscriptionAmount": {
+          "type": "number"
+        },
+        "profitAmount": {
+          "type": "number"
+        },
+        "paymentDocCount": {
+          "type": "integer"
+        },
+        "hasProofOfPayment": {
+          "type": "boolean"
+        },
+        "status": {
+          "type": "string",
+          "enum": ["pending_review", "approved", "rejected"]
+        },
+        "submittedAt": {
+          "type": "integer"
+        },
+        "creditedAt": {
+          "type": "integer"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "referralUid",
+        "referrerUid",
+        "invitedBy",
+        "referralName",
+        "plan",
+        "subscriptionAmount",
+        "profitAmount",
+        "paymentDocCount",
+        "hasProofOfPayment",
+        "status",
+        "submittedAt",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "GigPost": {
+      "title": "GigPost",
+      "description": "Live user-created gig listing anchored at an exact geographic coordinate on the map.",
+      "type": "object",
+      "properties": {
+        "gigId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "creatorUid": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "creatorName": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 120
+        },
+        "title": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 100
+        },
+        "category": {
+          "type": "string",
+          "enum": ["Handyman", "Delivery", "Cleaning", "Tech & IT", "Tutoring", "Events", "Other"]
+        },
+        "budget": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 40
+        },
+        "description": {
+          "type": "string",
+          "minLength": 3,
+          "maxLength": 500
+        },
+        "contactInfo": {
+          "type": "string",
+          "minLength": 3,
+          "maxLength": 80
+        },
+        "locationName": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200
+        },
+        "lat": {
+          "type": "number"
+        },
+        "lng": {
+          "type": "number"
+        },
+        "status": {
+          "type": "string",
+          "enum": ["active", "closed"]
+        },
+        "submittedAt": {
+          "type": "integer"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "gigId",
+        "creatorUid",
+        "creatorName",
+        "title",
+        "category",
+        "budget",
+        "description",
+        "contactInfo",
+        "locationName",
+        "lat",
+        "lng",
+        "status",
+        "submittedAt",
+        "createdAt",
+        "updatedAt"
+      ]
+    }
+  },
+  "firestore": {
+    "/users/{userId}/private/profile": {
+      "schema": {
+        "$ref": "#/entities/UserProfilePrivate"
+      },
+      "description": "Owner-only private profile document storing contact info, location, social links, face selfie logo, and invite code."
+    },
+    "/users/{userId}/private/subscription": {
+      "schema": {
+        "$ref": "#/entities/SubscriptionSubmission"
+      },
+      "description": "Subscription verification record supporting owner submission and reviewer tenant approval or rejection."
+    },
+    "/invites/{inviteCode}": {
+      "schema": {
+        "$ref": "#/entities/InviteCodeRecord"
+      },
+      "description": "Non-PII invite code registry allowing invite links to be verified without exposing user PII."
+    },
+    "/admins/{userId}": {
+      "schema": {
+        "$ref": "#/entities/AdminRecord"
+      },
+      "description": "Bootstrapped verified main admin role records."
+    },
+    "/userSubReferrals/{userId}": {
+      "schema": {
+        "$ref": "#/entities/UserSubReferral"
+      },
+      "description": "Subscription applications/referrals managed in the Main Tenant and Link-Tenant Referrals queue."
+    },
+    "/userSubReferrals/{userId}/files/{fileId}": {
+      "schema": {
+        "$ref": "#/entities/VerificationArtifactFile"
+      },
+      "description": "Captured face selfie, ID documents, and proof of payment documents for full-screen verification review."
+    },
+    "/mainTenantInvites/{inviteCode}": {
+      "schema": {
+        "$ref": "#/entities/MainTenantInvite"
+      },
+      "description": "Registry of invite codes belonging to the main tenant."
+    },
+    "/approvedLinkTenants/{userId}": {
+      "schema": {
+        "$ref": "#/entities/ApprovedLinkTenant"
+      },
+      "description": "Approved tenants who joined via the main tenant link and share main-tenant review permissions."
+    },
+    "/tenantReferralProfits/{referralUid}": {
+      "schema": {
+        "$ref": "#/entities/TenantReferralProfit"
+      },
+      "description": "Per-referral subscription proof-of-payment profit ledger scoped strictly to the referrer tenant and tenant reviewers."
+    },
+    "/gigPosts/{gigId}": {
+      "schema": {
+        "$ref": "#/entities/GigPost"
+      },
+      "description": "Live user-created gig posts displayed at their exact coordinates on the map."
+    }
+  }
+}

@@ -1,0 +1,875 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Global safety net: deny all access by default
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isVerifiedUser() {
+      return isSignedIn() && (
+        request.auth.token.email_verified == true ||
+        request.auth.token.firebase.sign_in_provider == 'password'
+      );
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function isAdmin() {
+      return isSignedIn()
+        && isVerifiedUser()
+        && (
+          request.auth.token.email == 'timegig2026@gmail.com' ||
+          exists(/databases/$(database)/documents/admins/$(request.auth.uid))
+        );
+    }
+
+    function isApprovedLinkTenant() {
+      return isSignedIn()
+        && isVerifiedUser()
+        && exists(/databases/$(database)/documents/approvedLinkTenants/$(request.auth.uid));
+    }
+
+    function isTenantReviewer() {
+      return isAdmin() || isApprovedLinkTenant();
+    }
+
+    function isValidUserProfile(data) {
+      return data.keys().hasAll([
+          'uid',
+          'firstName',
+          'lastName',
+          'email',
+          'contactInfo',
+          'locationName',
+          'autoLocation',
+          'socialLinks',
+          'isLocked',
+          'inviteCode',
+          'createdAt',
+          'updatedAt'
+        ])
+        && data.keys().hasOnly([
+          'uid',
+          'firstName',
+          'lastName',
+          'email',
+          'contactInfo',
+          'locationName',
+          'autoLocation',
+          'socialLinks',
+          'isLocked',
+          'logoDataUrl',
+          'logoUpdatedAt',
+          'inviteCode',
+          'invitedBy',
+          'createdAt',
+          'updatedAt'
+        ])
+        && data.uid is string && data.uid == request.auth.uid && isValidId(data.uid)
+        && data.firstName is string && data.firstName.size() <= 80
+        && data.lastName is string && data.lastName.size() <= 80
+        && data.email is string && data.email.size() <= 160
+        && data.contactInfo is string && data.contactInfo.size() <= 80
+        && data.locationName is string && data.locationName.size() <= 200
+        && data.autoLocation is bool
+        && data.socialLinks is list && data.socialLinks.size() <= 10
+        && (data.socialLinks.size() == 0 || data.socialLinks[0] is map)
+        && data.isLocked is bool
+        && data.inviteCode is string && data.inviteCode.size() >= 4 && data.inviteCode.size() <= 32 && data.inviteCode.matches('^[a-zA-Z0-9_\\-]+$')
+        && (!('logoDataUrl' in data) || (data.logoDataUrl is string && data.logoDataUrl.size() <= 400000))
+        && (!('logoUpdatedAt' in data) || (data.logoUpdatedAt is int && data.logoUpdatedAt >= 0))
+        && (!('invitedBy' in data) || (data.invitedBy is string && data.invitedBy.size() <= 32));
+    }
+
+    function isValidSubscription(data, userId) {
+      return data.keys().hasAll([
+          'uid',
+          'plan',
+          'status',
+          'submittedAt',
+          'docCount',
+          'docNames',
+          'hasSelfie',
+          'createdAt'
+        ])
+        && data.keys().hasOnly([
+          'uid',
+          'plan',
+          'status',
+          'submittedAt',
+          'docCount',
+          'docNames',
+          'paymentDocCount',
+          'paymentDocNames',
+          'hasSelfie',
+          'rejectionReason',
+          'createdAt'
+        ])
+        && data.uid is string && data.uid == userId && isValidId(data.uid)
+        && data.plan is string && data.plan in ['tenant', 'user']
+        && data.status is string && data.status in ['pending_review', 'active', 'rejected']
+        && data.submittedAt is int && data.submittedAt > 0
+        && data.docCount is int && data.docCount >= 1 && data.docCount <= 20
+        && data.docNames is list && data.docNames.size() >= 1 && data.docNames.size() <= 20 && data.docNames[0] is string && data.docNames[0].size() <= 120
+        && (!('paymentDocCount' in data) || (data.paymentDocCount is int && data.paymentDocCount >= 1 && data.paymentDocCount <= 20))
+        && (!('paymentDocNames' in data) || (data.paymentDocNames is list && data.paymentDocNames.size() >= 1 && data.paymentDocNames.size() <= 20 && data.paymentDocNames[0] is string && data.paymentDocNames[0].size() <= 120))
+        && data.hasSelfie is bool && data.hasSelfie == true
+        && (!('rejectionReason' in data) || (data.rejectionReason is string && data.rejectionReason.size() >= 3 && data.rejectionReason.size() <= 500))
+        && (data.status != 'rejected' || ('rejectionReason' in data && data.rejectionReason is string && data.rejectionReason.size() >= 3 && data.rejectionReason.size() <= 500))
+        && (data.status == 'rejected' || !('rejectionReason' in data));
+    }
+
+    function isValidInviteRecord(data) {
+      return data.keys().hasAll(['inviteCode', 'ownerUid', 'createdAt'])
+        && data.keys().hasOnly(['inviteCode', 'ownerUid', 'createdAt'])
+        && data.inviteCode is string && data.inviteCode.size() >= 4 && data.inviteCode.size() <= 32 && data.inviteCode.matches('^[a-zA-Z0-9_\\-]+$')
+        && data.ownerUid is string && data.ownerUid == request.auth.uid && isValidId(data.ownerUid);
+    }
+
+    function isValidAdminRecord(data) {
+      return data.keys().hasAll(['uid', 'email', 'role', 'createdAt'])
+        && data.keys().hasOnly(['uid', 'email', 'role', 'createdAt'])
+        && data.uid is string && data.uid == request.auth.uid && isValidId(data.uid)
+        && data.email is string && data.email.size() <= 160 && data.email == 'timegig2026@gmail.com'
+        && data.role is string && data.role == 'main_admin';
+    }
+
+    function isValidUserSubReferral(data, userId) {
+      return data.keys().hasAll([
+          'uid',
+          'applicantName',
+          'applicantEmail',
+          'contactInfo',
+          'locationName',
+          'invitedBy',
+          'plan',
+          'status',
+          'docCount',
+          'docNames',
+          'hasSelfie',
+          'submittedAt',
+          'createdAt',
+          'updatedAt'
+        ])
+        && data.keys().hasOnly([
+          'uid',
+          'applicantName',
+          'applicantEmail',
+          'contactInfo',
+          'locationName',
+          'invitedBy',
+          'plan',
+          'status',
+          'docCount',
+          'docNames',
+          'paymentDocCount',
+          'paymentDocNames',
+          'hasSelfie',
+          'submittedAt',
+          'reviewedBy',
+          'reviewedAt',
+          'rejectionReason',
+          'resubmittedCount',
+          'previousRejectionReason',
+          'resubmittedAt',
+          'createdAt',
+          'updatedAt'
+        ])
+        && data.uid is string && data.uid == userId && isValidId(data.uid)
+        && data.applicantName is string && data.applicantName.size() <= 160
+        && data.applicantEmail is string && data.applicantEmail.size() <= 160
+        && data.contactInfo is string && data.contactInfo.size() <= 80
+        && data.locationName is string && data.locationName.size() <= 200
+        && data.invitedBy is string && data.invitedBy.size() <= 32
+        && data.plan is string && data.plan in ['user', 'tenant']
+        && data.status is string && data.status in ['pending_review', 'approved', 'rejected']
+        && data.docCount is int && data.docCount >= 1 && data.docCount <= 20
+        && data.docNames is list && data.docNames.size() >= 1 && data.docNames.size() <= 20 && data.docNames[0] is string && data.docNames[0].size() <= 120
+        && (!('paymentDocCount' in data) || (data.paymentDocCount is int && data.paymentDocCount >= 1 && data.paymentDocCount <= 20))
+        && (!('paymentDocNames' in data) || (data.paymentDocNames is list && data.paymentDocNames.size() >= 1 && data.paymentDocNames.size() <= 20 && data.paymentDocNames[0] is string && data.paymentDocNames[0].size() <= 120))
+        && data.hasSelfie is bool && data.hasSelfie == true
+        && data.submittedAt is int && data.submittedAt > 0
+        && (!('reviewedBy' in data) || (data.reviewedBy is string && isValidId(data.reviewedBy)))
+        && (!('reviewedAt' in data) || data.reviewedAt is timestamp)
+        && (!('rejectionReason' in data) || (data.rejectionReason is string && data.rejectionReason.size() >= 3 && data.rejectionReason.size() <= 500))
+        && (data.status != 'rejected' || ('rejectionReason' in data && data.rejectionReason is string && data.rejectionReason.size() >= 3 && data.rejectionReason.size() <= 500))
+        && (data.status == 'rejected' || !('rejectionReason' in data))
+        && (!('resubmittedCount' in data) || (data.resubmittedCount is int && data.resubmittedCount >= 1 && data.resubmittedCount <= 100))
+        && (!('previousRejectionReason' in data) || (data.previousRejectionReason is string && data.previousRejectionReason.size() >= 3 && data.previousRejectionReason.size() <= 500))
+        && (!('resubmittedAt' in data) || (data.resubmittedAt is int && data.resubmittedAt > 0));
+    }
+
+    function isValidVerificationFile(data, userId, fileId) {
+      return data.keys().hasAll([
+          'uid',
+          'fileId',
+          'category',
+          'name',
+          'mimeType',
+          'dataUrl',
+          'size',
+          'createdAt'
+        ])
+        && data.keys().hasOnly([
+          'uid',
+          'fileId',
+          'category',
+          'name',
+          'mimeType',
+          'dataUrl',
+          'size',
+          'createdAt'
+        ])
+        && data.uid is string && data.uid == userId && isValidId(data.uid)
+        && data.fileId is string && data.fileId == fileId && isValidId(data.fileId)
+        && data.category is string && data.category in ['selfie', 'id_document', 'proof_of_payment']
+        && data.name is string && data.name.size() >= 1 && data.name.size() <= 160
+        && data.mimeType is string && data.mimeType.size() >= 1 && data.mimeType.size() <= 100
+        && data.dataUrl is string && data.dataUrl.size() >= 10 && data.dataUrl.size() <= 800000
+        && data.size is int && data.size >= 0 && data.size <= 10000000;
+    }
+
+    function isValidMainTenantInvite(data, inviteCode) {
+      return data.keys().hasAll(['inviteCode', 'ownerUid', 'createdAt'])
+        && data.keys().hasOnly(['inviteCode', 'ownerUid', 'createdAt'])
+        && data.inviteCode is string && data.inviteCode == inviteCode && inviteCode.size() >= 4 && inviteCode.size() <= 32 && inviteCode.matches('^[a-zA-Z0-9_\\-]+$')
+        && data.ownerUid is string && data.ownerUid == request.auth.uid && isValidId(data.ownerUid);
+    }
+
+    function isValidApprovedLinkTenant(data, userId) {
+      return data.keys().hasAll(['uid', 'invitedBy', 'approvedBy', 'plan', 'createdAt'])
+        && data.keys().hasOnly(['uid', 'invitedBy', 'approvedBy', 'plan', 'createdAt'])
+        && data.uid is string && data.uid == userId && isValidId(data.uid)
+        && data.invitedBy is string && data.invitedBy.size() >= 4 && data.invitedBy.size() <= 32 && data.invitedBy.matches('^[a-zA-Z0-9_\\-]+$')
+        && data.approvedBy is string && data.approvedBy == request.auth.uid && isValidId(data.approvedBy)
+        && data.plan is string && data.plan == 'tenant';
+    }
+
+    function isValidTenantReferralProfit(data, referralUid) {
+      return data.keys().hasAll([
+          'referralUid',
+          'referrerUid',
+          'invitedBy',
+          'referralName',
+          'plan',
+          'subscriptionAmount',
+          'profitAmount',
+          'paymentDocCount',
+          'hasProofOfPayment',
+          'status',
+          'submittedAt',
+          'createdAt',
+          'updatedAt'
+        ])
+        && data.keys().hasOnly([
+          'referralUid',
+          'referrerUid',
+          'invitedBy',
+          'referralName',
+          'plan',
+          'subscriptionAmount',
+          'profitAmount',
+          'paymentDocCount',
+          'hasProofOfPayment',
+          'status',
+          'submittedAt',
+          'creditedAt',
+          'createdAt',
+          'updatedAt'
+        ])
+        && data.referralUid is string && data.referralUid == referralUid && isValidId(data.referralUid)
+        && data.referrerUid is string && isValidId(data.referrerUid) && data.referrerUid != data.referralUid
+        && data.invitedBy is string && data.invitedBy.size() >= 4 && data.invitedBy.size() <= 32 && data.invitedBy.matches('^[a-zA-Z0-9_\\-]+$')
+        && data.referralName is string && data.referralName.size() >= 1 && data.referralName.size() <= 160
+        && data.plan is string && data.plan in ['user', 'tenant']
+        && (
+          (data.plan == 'tenant' && data.subscriptionAmount == 299.99 && (data.profitAmount == 299.99 || data.profitAmount == 45 || data.profitAmount == 45.0)) ||
+          (data.plan == 'user' && data.subscriptionAmount == 29.99 && (data.profitAmount == 29.99 || data.profitAmount == 4.5))
+        )
+        && data.paymentDocCount is int && data.paymentDocCount >= 1 && data.paymentDocCount <= 20
+        && data.hasProofOfPayment is bool && data.hasProofOfPayment == true
+        && data.status is string && data.status in ['pending_review', 'approved', 'rejected']
+        && data.submittedAt is int && data.submittedAt > 0
+        && (!('creditedAt' in data) || (data.creditedAt is int && data.creditedAt > 0))
+        && (data.status == 'approved' || !('creditedAt' in data));
+    }
+
+    function isValidGigPost(data, gigId) {
+      return data.keys().hasAll([
+          'gigId',
+          'creatorUid',
+          'creatorName',
+          'title',
+          'category',
+          'budget',
+          'description',
+          'contactInfo',
+          'locationName',
+          'lat',
+          'lng',
+          'status',
+          'submittedAt',
+          'createdAt',
+          'updatedAt'
+        ])
+        && data.keys().hasOnly([
+          'gigId',
+          'creatorUid',
+          'creatorName',
+          'title',
+          'creatorSelfieUrl',
+          'title',
+          'category',
+          'budget',
+          'description',
+          'contactInfo',
+          'locationName',
+          'lat',
+          'lng',
+          'status',
+          'submittedAt',
+          'applicantUid',
+          'applicantName',
+          'applicantSelfieUrl',
+          'applicationStatus',
+          'applicationTries',
+          'completedUserUid',
+          'completedUserName',
+          'rating',
+          'cancellationReason',
+          'cancelledByUid',
+          'cancelledByName',
+          'createdAt',
+          'updatedAt'
+        ])
+        && data.gigId is string && data.gigId == gigId && isValidId(data.gigId)
+        && data.creatorUid is string && isValidId(data.creatorUid)
+        && data.creatorName is string && data.creatorName.size() >= 1 && data.creatorName.size() <= 120
+        && (!('creatorSelfieUrl' in data) || (data.creatorSelfieUrl is string && data.creatorSelfieUrl.size() <= 400000))
+        && data.title is string && data.title.size() >= 2 && data.title.size() <= 100
+        && data.category is string && data.category in ['Handyman', 'Delivery', 'Cleaning', 'Tech & IT', 'Tutoring', 'Events', 'Other']
+        && data.budget is string && data.budget.size() >= 1 && data.budget.size() <= 40
+        && data.description is string && data.description.size() >= 3 && data.description.size() <= 500
+        && data.contactInfo is string && data.contactInfo.size() >= 3 && data.contactInfo.size() <= 80
+        && data.locationName is string && data.locationName.size() >= 1 && data.locationName.size() <= 200
+        && (data.lat is float || data.lat is int) && data.lat >= -90 && data.lat <= 90
+        && (data.lng is float || data.lng is int) && data.lng >= -180 && data.lng <= 180
+        && data.status is string && data.status in ['active', 'completed', 'cancelled']
+        && data.submittedAt is int && data.submittedAt > 0
+        && (!('applicantUid' in data) || (data.applicantUid is string && isValidId(data.applicantUid)))
+        && (!('applicantName' in data) || (data.applicantName is string && data.applicantName.size() <= 120))
+        && (!('applicantSelfieUrl' in data) || (data.applicantSelfieUrl is string && data.applicantSelfieUrl.size() <= 400000))
+        && (!('applicationStatus' in data) || (data.applicationStatus is string && data.applicationStatus in ['none', 'pending', 'accepted', 'rejected', 'timeout']))
+        && (!('applicationTries' in data) || (data.applicationTries is int && data.applicationTries >= 0 && data.applicationTries <= 10))
+        && (!('completedUserUid' in data) || (data.completedUserUid is string && isValidId(data.completedUserUid)))
+        && (!('completedUserName' in data) || (data.completedUserName is string && data.completedUserName.size() <= 120))
+        && (!('rating' in data) || (data.rating is int && data.rating >= 1 && data.rating <= 5))
+        && (!('cancellationReason' in data) || (data.cancellationReason is string && data.cancellationReason.size() >= 2 && data.cancellationReason.size() <= 500))
+        && (!('cancelledByUid' in data) || (data.cancelledByUid is string && isValidId(data.cancelledByUid)))
+        && (!('cancelledByName' in data) || (data.cancelledByName is string && data.cancelledByName.size() <= 120));
+    }
+
+    // Bootstrapped main admin record for timegig2026@gmail.com
+    match /admins/{userId} {
+      allow get: if isValidId(userId) && isOwner(userId);
+      allow list: if false;
+      allow create: if isValidId(userId)
+        && isOwner(userId)
+        && isVerifiedUser()
+        && request.auth.token.email == 'timegig2026@gmail.com'
+        && isValidAdminRecord(incoming())
+        && incoming().createdAt == request.time
+        && !exists(/databases/$(database)/documents/admins/$(userId));
+      allow update: if false;
+      allow delete: if false;
+    }
+
+    // Owner-isolated private profile document
+    match /users/{userId}/private/profile {
+      allow get: if isValidId(userId) && isOwner(userId);
+      allow list: if false;
+      allow create: if isValidId(userId)
+        && isVerifiedUser()
+        && isOwner(userId)
+        && isValidUserProfile(incoming())
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time;
+      allow update: if isValidId(userId)
+        && isVerifiedUser()
+        && isOwner(userId)
+        && isValidUserProfile(incoming())
+        && incoming().uid == existing().uid
+        && incoming().inviteCode == existing().inviteCode
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && (
+          incoming().diff(existing()).affectedKeys().hasOnly([
+            'firstName', 'lastName', 'email', 'contactInfo', 'locationName',
+            'autoLocation', 'socialLinks', 'isLocked', 'invitedBy', 'updatedAt'
+          ]) ||
+          incoming().diff(existing()).affectedKeys().hasOnly([
+            'logoDataUrl', 'logoUpdatedAt', 'updatedAt'
+          ])
+        );
+      allow delete: if false;
+    }
+
+    // Subscription verification record (create by owner, approved/rejected by reviewer, resubmitted by owner if rejected)
+    match /users/{userId}/private/subscription {
+      allow get: if isValidId(userId) && (isOwner(userId) || isTenantReviewer());
+      allow list: if false;
+      allow create: if isValidId(userId)
+        && isOwner(userId)
+        && isValidSubscription(incoming(), userId)
+        && incoming().createdAt == request.time
+        && !exists(/databases/$(database)/documents/users/$(userId)/private/subscription)
+        && (
+          (isVerifiedUser() && incoming().status == 'pending_review') ||
+          (isAdmin() && incoming().plan == 'tenant' && incoming().status == 'active')
+        );
+      allow update: if isValidId(userId)
+        && isValidSubscription(incoming(), userId)
+        && incoming().uid == existing().uid
+        && incoming().createdAt == existing().createdAt
+        && (
+          (
+            isAdmin()
+            && isOwner(userId)
+            && incoming().plan == 'tenant'
+            && incoming().status == 'active'
+            && incoming().submittedAt == existing().submittedAt
+            && incoming().docCount == existing().docCount
+            && incoming().docNames == existing().docNames
+            && (!('paymentDocCount' in existing()) || ('paymentDocCount' in incoming() && incoming().paymentDocCount == existing().paymentDocCount))
+            && (!('paymentDocNames' in existing()) || ('paymentDocNames' in incoming() && incoming().paymentDocNames == existing().paymentDocNames))
+            && incoming().hasSelfie == existing().hasSelfie
+            && incoming().diff(existing()).affectedKeys().hasOnly(['plan', 'status', 'rejectionReason'])
+          ) ||
+          (
+            isTenantReviewer()
+            && incoming().plan == existing().plan
+            && incoming().status in ['active', 'rejected']
+            && incoming().submittedAt == existing().submittedAt
+            && incoming().docCount == existing().docCount
+            && incoming().docNames == existing().docNames
+            && (!('paymentDocCount' in existing()) || ('paymentDocCount' in incoming() && incoming().paymentDocCount == existing().paymentDocCount))
+            && (!('paymentDocNames' in existing()) || ('paymentDocNames' in incoming() && incoming().paymentDocNames == existing().paymentDocNames))
+            && incoming().hasSelfie == existing().hasSelfie
+            && incoming().diff(existing()).affectedKeys().hasOnly(['status', 'rejectionReason'])
+          ) ||
+          (
+            isVerifiedUser()
+            && isOwner(userId)
+            && existing().status == 'rejected'
+            && incoming().status == 'pending_review'
+            && incoming().diff(existing()).affectedKeys().hasOnly([
+              'plan',
+              'status',
+              'submittedAt',
+              'docCount',
+              'docNames',
+              'paymentDocCount',
+              'paymentDocNames',
+              'hasSelfie',
+              'rejectionReason'
+            ])
+          )
+        );
+      allow delete: if false;
+    }
+
+    // Subscription referral submissions reviewed in Main Tenant & Link-Tenant Referrals view
+    match /userSubReferrals/{userId} {
+      allow get: if isValidId(userId) && (isOwner(userId) || isTenantReviewer());
+      allow list: if isTenantReviewer();
+      allow create: if isValidId(userId)
+        && isVerifiedUser()
+        && isOwner(userId)
+        && isValidUserSubReferral(incoming(), userId)
+        && incoming().status == 'pending_review'
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time
+        && !('reviewedBy' in incoming())
+        && !('reviewedAt' in incoming())
+        && !('resubmittedCount' in incoming())
+        && !('previousRejectionReason' in incoming())
+        && !('resubmittedAt' in incoming())
+        && !exists(/databases/$(database)/documents/userSubReferrals/$(userId));
+      allow update: if isValidId(userId)
+        && isValidUserSubReferral(incoming(), userId)
+        && incoming().uid == existing().uid
+        && incoming().invitedBy == existing().invitedBy
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && (
+          (
+            isTenantReviewer()
+            && incoming().applicantName == existing().applicantName
+            && incoming().applicantEmail == existing().applicantEmail
+            && incoming().contactInfo == existing().contactInfo
+            && incoming().locationName == existing().locationName
+            && incoming().plan == existing().plan
+            && incoming().docCount == existing().docCount
+            && incoming().docNames == existing().docNames
+            && (!('paymentDocCount' in existing()) || ('paymentDocCount' in incoming() && incoming().paymentDocCount == existing().paymentDocCount))
+            && (!('paymentDocNames' in existing()) || ('paymentDocNames' in incoming() && incoming().paymentDocNames == existing().paymentDocNames))
+            && incoming().hasSelfie == existing().hasSelfie
+            && incoming().submittedAt == existing().submittedAt
+            && (!('resubmittedCount' in existing()) || ('resubmittedCount' in incoming() && incoming().resubmittedCount == existing().resubmittedCount))
+            && (!('previousRejectionReason' in existing()) || ('previousRejectionReason' in incoming() && incoming().previousRejectionReason == existing().rejectionReason))
+            && (!('resubmittedAt' in existing()) || ('resubmittedAt' in incoming() && incoming().resubmittedAt == existing().resubmittedAt))
+            && incoming().reviewedBy == request.auth.uid
+            && incoming().reviewedAt == request.time
+            && incoming().status in ['approved', 'rejected']
+            && incoming().diff(existing()).affectedKeys().hasOnly([
+              'status',
+              'reviewedBy',
+              'reviewedAt',
+              'rejectionReason',
+              'updatedAt'
+            ])
+          ) ||
+          (
+            isVerifiedUser()
+            && isOwner(userId)
+            && existing().status == 'rejected'
+            && incoming().status == 'pending_review'
+            && !('reviewedBy' in incoming())
+            && !('reviewedAt' in incoming())
+            && (
+              (!('resubmittedCount' in existing()) && 'resubmittedCount' in incoming() && incoming().resubmittedCount == 1) ||
+              ('resubmittedCount' in existing() && 'resubmittedCount' in incoming() && incoming().resubmittedCount == existing().resubmittedCount + 1)
+            )
+            && (!('rejectionReason' in existing()) || ('previousRejectionReason' in incoming() && incoming().previousRejectionReason == existing().rejectionReason))
+            && 'resubmittedAt' in incoming()
+            && incoming().diff(existing()).affectedKeys().hasOnly([
+              'applicantName',
+              'applicantEmail',
+              'contactInfo',
+              'locationName',
+              'plan',
+              'status',
+              'docCount',
+              'docNames',
+              'paymentDocCount',
+              'paymentDocNames',
+              'hasSelfie',
+              'submittedAt',
+              'reviewedBy',
+              'reviewedAt',
+              'rejectionReason',
+              'resubmittedCount',
+              'previousRejectionReason',
+              'resubmittedAt',
+              'updatedAt'
+            ])
+          )
+        );
+      allow delete: if false;
+
+      // Captured face selfie, ID documents, and proof of payment files
+      match /files/{fileId} {
+        allow get: if isValidId(userId) && isValidId(fileId) && (
+          isOwner(userId) ||
+          isTenantReviewer() ||
+          (
+            fileId == 'selfie'
+            && isVerifiedUser()
+            && exists(/databases/$(database)/documents/tenantReferralProfits/$(userId))
+            && get(/databases/$(database)/documents/tenantReferralProfits/$(userId)).data.referrerUid == request.auth.uid
+          )
+        );
+        allow list: if isValidId(userId) && (isOwner(userId) || isTenantReviewer());
+        allow create: if isValidId(userId)
+          && isValidId(fileId)
+          && isVerifiedUser()
+          && isOwner(userId)
+          && isValidVerificationFile(incoming(), userId, fileId)
+          && incoming().createdAt == request.time
+          && !exists(/databases/$(database)/documents/userSubReferrals/$(userId)/files/$(fileId));
+        allow update: if isValidId(userId)
+          && isValidId(fileId)
+          && isVerifiedUser()
+          && isOwner(userId)
+          && isValidVerificationFile(incoming(), userId, fileId)
+          && incoming().uid == existing().uid
+          && incoming().fileId == existing().fileId
+          && incoming().createdAt == existing().createdAt
+          && incoming().diff(existing()).affectedKeys().hasOnly([
+            'category',
+            'name',
+            'mimeType',
+            'dataUrl',
+            'size'
+          ])
+          && get(/databases/$(database)/documents/userSubReferrals/$(userId)).data.status == 'rejected';
+        allow delete: if isValidId(userId)
+          && isValidId(fileId)
+          && isVerifiedUser()
+          && isOwner(userId)
+          && get(/databases/$(database)/documents/userSubReferrals/$(userId)).data.status == 'rejected';
+      }
+    }
+
+    // Non-PII public lookup for invite codes
+    match /invites/{inviteCode} {
+      allow get: if isValidId(inviteCode) && inviteCode.size() >= 4 && inviteCode.size() <= 32;
+      allow list: if false;
+      allow create: if isValidId(inviteCode)
+        && isVerifiedUser()
+        && isValidInviteRecord(incoming())
+        && incoming().inviteCode == inviteCode
+        && incoming().createdAt == request.time
+        && !exists(/databases/$(database)/documents/invites/$(inviteCode));
+      allow update: if false;
+      allow delete: if false;
+    }
+
+    // Main tenant & approved network-tenant invite code registry
+    match /mainTenantInvites/{inviteCode} {
+      allow get: if isValidId(inviteCode) && inviteCode.size() >= 4 && inviteCode.size() <= 32;
+      allow list: if false;
+      allow create: if isValidId(inviteCode)
+        && isTenantReviewer()
+        && isValidMainTenantInvite(incoming(), inviteCode)
+        && incoming().createdAt == request.time
+        && exists(/databases/$(database)/documents/invites/$(inviteCode))
+        && get(/databases/$(database)/documents/invites/$(inviteCode)).data.ownerUid == request.auth.uid
+        && !exists(/databases/$(database)/documents/mainTenantInvites/$(inviteCode));
+      allow update: if false;
+      allow delete: if false;
+    }
+
+    // Approved tenants who joined through main tenant link and share main tenant capabilities
+    match /approvedLinkTenants/{userId} {
+      allow get: if isValidId(userId) && (isOwner(userId) || isTenantReviewer());
+      allow list: if false;
+      allow create: if isValidId(userId)
+        && isVerifiedUser()
+        && isValidApprovedLinkTenant(incoming(), userId)
+        && incoming().createdAt == request.time
+        && !exists(/databases/$(database)/documents/approvedLinkTenants/$(userId))
+        && exists(/databases/$(database)/documents/mainTenantInvites/$(incoming().invitedBy))
+        && (
+          isTenantReviewer() ||
+          (
+            isOwner(userId)
+            && get(/databases/$(database)/documents/users/$(userId)/private/subscription).data.plan == 'tenant'
+            && get(/databases/$(database)/documents/users/$(userId)/private/subscription).data.status == 'active'
+          )
+        );
+      allow update: if false;
+      allow delete: if false;
+    }
+
+    // Referrer-isolated subscription proof-of-payment profit ledger for Tenant Wallet
+    match /tenantReferralProfits/{referralUid} {
+      allow get: if isValidId(referralUid) && (
+        isOwner(referralUid) ||
+        isTenantReviewer() ||
+        (isVerifiedUser() && existing().referrerUid == request.auth.uid)
+      );
+      allow list: if isTenantReviewer() || (
+        isVerifiedUser() && resource.data.referrerUid == request.auth.uid
+      );
+      allow create: if isValidId(referralUid)
+        && isVerifiedUser()
+        && isValidTenantReferralProfit(incoming(), referralUid)
+        && incoming().profitAmount == incoming().subscriptionAmount
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time
+        && !exists(/databases/$(database)/documents/tenantReferralProfits/$(referralUid))
+        && exists(/databases/$(database)/documents/invites/$(incoming().invitedBy))
+        && get(/databases/$(database)/documents/invites/$(incoming().invitedBy)).data.ownerUid == incoming().referrerUid
+        && (
+          (isOwner(referralUid) && incoming().status == 'pending_review') ||
+          isTenantReviewer()
+        );
+      allow update: if isValidId(referralUid)
+        && isValidTenantReferralProfit(incoming(), referralUid)
+        && incoming().referralUid == existing().referralUid
+        && incoming().referrerUid == existing().referrerUid
+        && incoming().invitedBy == existing().invitedBy
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && (
+          (
+            isTenantReviewer()
+            && incoming().referralName == existing().referralName
+            && incoming().plan == existing().plan
+            && incoming().subscriptionAmount == existing().subscriptionAmount
+            && incoming().profitAmount == existing().profitAmount
+            && incoming().paymentDocCount == existing().paymentDocCount
+            && incoming().hasProofOfPayment == existing().hasProofOfPayment
+            && incoming().submittedAt == existing().submittedAt
+            && incoming().status in ['approved', 'rejected']
+            && incoming().diff(existing()).affectedKeys().hasOnly([
+              'status',
+              'creditedAt',
+              'updatedAt'
+            ])
+          ) ||
+          (
+            isVerifiedUser()
+            && isOwner(referralUid)
+            && existing().status == 'rejected'
+            && incoming().status == 'pending_review'
+            && incoming().diff(existing()).affectedKeys().hasOnly([
+              'referralName',
+              'plan',
+              'subscriptionAmount',
+              'profitAmount',
+              'paymentDocCount',
+              'hasProofOfPayment',
+              'status',
+              'submittedAt',
+              'creditedAt',
+              'updatedAt'
+            ])
+          )
+        );
+      allow delete: if false;
+    }
+
+    // Live user-created gig posts at exact map coordinates
+    match /gigPosts/{gigId} {
+      allow get: if isValidId(gigId) && isVerifiedUser();
+      allow list: if isVerifiedUser() && resource.data.status in ['active', 'completed', 'cancelled'];
+      allow create: if isValidId(gigId)
+        && isVerifiedUser()
+        && isValidGigPost(incoming(), gigId)
+        && incoming().creatorUid == request.auth.uid
+        && incoming().status == 'active'
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time
+        && !exists(/databases/$(database)/documents/gigPosts/$(gigId));
+      allow update: if isValidId(gigId)
+        && isVerifiedUser()
+        && isValidGigPost(incoming(), gigId)
+        && incoming().gigId == existing().gigId
+        && incoming().creatorUid == existing().creatorUid
+        && incoming().createdAt == existing().createdAt
+        && incoming().submittedAt == existing().submittedAt
+        && incoming().updatedAt == request.time
+        && existing().status == 'active'
+        && (
+          (
+            (isOwner(existing().creatorUid) || isAdmin())
+            && incoming().status in ['active', 'completed', 'cancelled']
+          ) ||
+          (
+            // Referral / User applying for the gig: owner cannot apply to own gig
+            isSignedIn()
+            && request.auth.uid != existing().creatorUid
+            && incoming().applicantUid == request.auth.uid
+            && incoming().status == 'active'
+            && incoming().applicationStatus in ['pending', 'timeout']
+          ) ||
+          (
+            isSignedIn()
+            && incoming().status == 'cancelled'
+            && 'cancellationReason' in incoming()
+            && incoming().cancelledByUid == request.auth.uid
+          )
+        );
+      allow delete: if isValidId(gigId)
+        && isVerifiedUser()
+        && (isOwner(existing().creatorUid) || isAdmin());
+    }
+
+    function isValidSeekerHire(data, hireId) {
+      return data.keys().hasAll([
+          'hireId',
+          'seekerUid',
+          'seekerName',
+          'hirerUid',
+          'hirerName',
+          'hirerContact',
+          'gigTitle',
+          'gigBudget',
+          'destinationLat',
+          'destinationLng',
+          'destinationAddress',
+          'status',
+          'createdAt'
+        ])
+        && data.keys().hasOnly([
+          'hireId',
+          'seekerUid',
+          'seekerName',
+          'seekerSelfieUrl',
+          'hirerUid',
+          'hirerName',
+          'hirerContact',
+          'gigTitle',
+          'gigBudget',
+          'destinationLat',
+          'destinationLng',
+          'destinationAddress',
+          'status',
+          'createdAt',
+          'updatedAt'
+        ])
+        && data.hireId is string && data.hireId == hireId && isValidId(data.hireId)
+        && data.seekerUid is string && isValidId(data.seekerUid)
+        && data.seekerName is string && data.seekerName.size() <= 120
+        && (!('seekerSelfieUrl' in data) || (data.seekerSelfieUrl is string && data.seekerSelfieUrl.size() <= 400000))
+        && data.hirerUid is string && isValidId(data.hirerUid)
+        && data.hirerName is string && data.hirerName.size() <= 120
+        && data.hirerContact is string && data.hirerContact.size() <= 80
+        && data.gigTitle is string && data.gigTitle.size() <= 120
+        && data.gigBudget is string && data.gigBudget.size() <= 40
+        && (data.destinationLat is float || data.destinationLat is int)
+        && (data.destinationLng is float || data.destinationLng is int)
+        && data.destinationAddress is string && data.destinationAddress.size() <= 200
+        && data.status is string && data.status in ['waiting', 'accepted', 'declined', 'timeout']
+        && (data.createdAt is int || data.createdAt is timestamp);
+    }
+
+    // Seeker hiring requests initiated by users
+    match /seekerHires/{hireId} {
+      allow get: if isValidId(hireId) && isVerifiedUser();
+      allow list: if isVerifiedUser() && (
+        resource.data.hirerUid == request.auth.uid ||
+        resource.data.seekerUid == request.auth.uid ||
+        isAdmin()
+      );
+      allow create: if isValidId(hireId)
+        && isVerifiedUser()
+        && isValidSeekerHire(incoming(), hireId)
+        && incoming().hirerUid == request.auth.uid
+        && !exists(/databases/$(database)/documents/seekerHires/$(hireId));
+      allow update: if isValidId(hireId)
+        && isVerifiedUser()
+        && isValidSeekerHire(incoming(), hireId)
+        && (
+          incoming().hirerUid == request.auth.uid ||
+          incoming().seekerUid == request.auth.uid ||
+          isAdmin()
+        );
+      allow delete: if isValidId(hireId)
+        && isVerifiedUser()
+        && (existing().hirerUid == request.auth.uid || isAdmin());
+    }
+  }
+}

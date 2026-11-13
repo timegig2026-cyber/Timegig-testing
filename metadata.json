@@ -1,0 +1,11 @@
+{
+  "name": "Global GeoAtlas",
+  "description": "Interactive world map template showing live user location using OpenStreetMap with zero API costs, place search, weather, routing, and bookmarks.",
+  "requestFramePermissions": [
+    "geolocation",
+    "camera"
+  ],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
